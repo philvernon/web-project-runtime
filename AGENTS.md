@@ -10,7 +10,9 @@ Expose explicit Pi model access with key/local configuration and supported optio
 
 Preserve bounded validation, compile-only server processing, exact trusted dependency resolution, artifact expiry, cancellation, bounded repair and sandbox lifecycle/message checks. Document public networking and browser resource limits accurately.
 
-Use public package exports in consumer and distribution tests. Verify a packed installation outside this repository. Keep server code out of browser entry points. Do not invent a license grant or publish to npm.
+Use public package exports in consumer and distribution tests. Verify a packed installation outside this repository, including styled WebBuilder, strict declarations and React-free server/headless usage. Keep server/Pi/auth code out of browser entry points and example definitions out of core imports and tarballs. Preserve the generic Dolebot-derived UI provenance without private source hashes. Do not invent a license grant or publish to npm.
+
+Verification uses the existing Vitest/tsx/Playwright/esbuild harness. After `npm ci` and `npm --prefix examples/shared ci`, run `npm run check`, `npm test`, `npm run test:distribution`, `npm run test:browser` and `npm run test:examples`. CI runs these gates on both supported pinned toolchains. Browser tests must exercise actual Pi/protocol/tool/generation paths against isolated synthetic endpoints; no live calls or fixture fallback in the runnable examples. Fixtures do not establish live inference or OAuth/provider acceptance.
 
 Keep README concise: purpose, usage, development commands and essential limitations. No marketing, status narrative or process commentary.
 

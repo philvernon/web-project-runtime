@@ -12,8 +12,7 @@ Only the example definitions contain domain guidance, context, starters and depe
 Requires Node 24.18+ and npm 11.16+ within their 24.x/11.x major versions. From the repository root:
 
 ```sh
-npm ci
-npm run build
+npm ci                         # prepare builds the library and package CSS
 npm --prefix examples/shared ci
 ```
 
@@ -45,12 +44,10 @@ The library still allows at most one generation per turn, an initial project cal
 From the repository root, after the setup above:
 
 ```sh
-npx tsc --noEmit -p examples/shared/tsconfig.json
-npx prettier --check examples tests/examples*
-npx vitest run tests/examples.test.ts
-npx tsx tests/examples-host.ts
-npx playwright install chromium  # once, if not already installed
-npx tsx tests/examples-browser.ts
+npm run check                     # includes strict example types and formatting
+npm test                          # includes example configuration tests
+npx playwright install chromium   # once, if not already installed
+npm run test:examples              # host boundaries + desktop/mobile journeys
 ```
 
 The browser journeys run each app at desktop and mobile widths, generate then refine, use keyboard/touch controls, check streamed text/progress before generation completes, matching inline sandboxed artifacts, backend Stop with partial text retained, Reset/disposal, host/frame horizontal overflow and host axe checks. Opaque frames cannot be audited by axe from the host; their controls and chart summaries are checked explicitly with Playwright. The host test covers Origin/session/request bounds and browser configuration/bundle separation.

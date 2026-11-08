@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Bounded generated web projects compiled into isolated browser artifacts",
+  "description": "Pi-backed web builder with conversation UI, bounded generation and isolated previews",
   "engines": {
     "node": ">=24.18.0 <25",
     "npm": ">=11.16.0 <12"
@@ -11,7 +11,8 @@
   "packageManager": "npm@11.19.1",
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "docs/builder-api.md"
   ],
   "exports": {
     "./contracts": {
@@ -39,14 +40,16 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json && node scripts/build-client.mjs",
     "prepare": "npm run build",
-    "check": "npm run lint && npm run format:check",
+    "check": "npm run lint && npm run typecheck:examples && npm run format:check",
     "typecheck": "tsc --noEmit",
+    "typecheck:examples": "tsc --noEmit -p examples/shared/tsconfig.json",
     "lint": "tsc --noEmit --noUnusedLocals --noUnusedParameters",
-    "format": "prettier --write src tests scripts *.json *.md",
-    "format:check": "prettier --check src tests scripts *.json *.md",
+    "format": "prettier --write src tests scripts examples docs .github *.json *.md",
+    "format:check": "prettier --check src tests scripts examples docs .github *.json *.md",
     "test": "vitest run",
     "test:distribution": "tsx tests/distribution.ts",
-    "test:browser": "tsx tests/browser.ts && tsx tests/builder-browser.ts"
+    "test:browser": "tsx tests/browser.ts && tsx tests/builder-browser.ts",
+    "test:examples": "tsx tests/examples-host.ts && tsx tests/examples-browser.ts"
   },
   "dependencies": {
     "@earendil-works/pi-agent-core": "1.3.0",

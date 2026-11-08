@@ -1,10 +1,30 @@
 # Web project runtime
 
-Pi-backed conversations generate and refine JavaScript web projects, validate and compile them, and deliver sandboxed browser artifacts. Hosts supply explicit model configuration, application instructions, public context and exact dependency approvals. No filesystem, shell or browser-automation tools are installed.
+A reusable Pi-backed web builder: conversation UI, streamed generation and refinement, validated compilation, and sandboxed inline previews. Hosts supply explicit model configuration, application instructions, public context and exact dependency approvals. No custom model loop, filesystem/shell/browser-automation tools, Next or Tailwind setup is needed.
 
-Node.js >=24.18.0 <25, npm >=11.16.0 <12. ESM and TypeScript declarations. React 19 is optional; `/server`, `/pi`, `/contracts` and `/headless` work without React.
+Node.js **>=24.18.0 <25**, npm **>=11.16.0 <12**. ESM with TypeScript declarations. React 19 is optional; server and headless APIs work without it.
 
-## Builder execution
+## Full builder
+
+```tsx
+import { WebBuilder } from "@philvernon/web-project-runtime/client";
+import { createHttpBuilderTransport } from "@philvernon/web-project-runtime/headless";
+import "@philvernon/web-project-runtime/styles.css";
+
+// Keep these references stable; match the server's artifact route.
+const transport = createHttpBuilderTransport({ endpoint: "/builder" });
+const artifactPath = (id: string) => `/artifacts/${id}`;
+
+export function Builder() {
+  return (
+    <div style={{ height: "100dvh" }}>
+      <WebBuilder transport={transport} artifactPath={artifactPath} />
+    </div>
+  );
+}
+```
+
+The builder renders ordered conversation, real streamed text/work phases, safe Markdown, errors, Stop/Reset and matching sandboxed artifacts. The headless controller is its single state authority; unmount/reset abort requests and dispose previews.
 
 ```ts
 // Server only
@@ -29,114 +49,51 @@ const gateway = createPiGateway({
   modelId: "gpt-4o-mini",
   auth: { type: "apiKey", key: operatorSuppliedKey },
 });
-const service = createBuilderService({
-  runtime,
-  gateway,
-  instructions: "Host guidance",
-});
-const session = service.createSession(); // host owns its lifetime and authenticated scope
+const service = createBuilderService({ runtime, gateway });
+const session = service.createSession(); // host-owned authenticated scope/lifetime
 
-// POST /builder: authenticate and select the session BEFORE calling this handler.
+// POST /builder: authenticate and select the session BEFORE calling.
 const response = await handleBuilderRequest(request, {
   session,
   exactOrigin: "https://your-app.example",
   path: "/builder",
 });
-// GET /artifacts/:id: authorize access through the same host scope.
+// GET /artifacts/:id: authorize access through the same scope.
 const artifact = artifactResponse(runtime.getArtifact(id));
 // On host session removal: await session.dispose();
 ```
 
-```ts
-// Browser, framework-free
-import {
-  createHttpBuilderTransport,
-  createWebBuilderController,
-} from "@philvernon/web-project-runtime/headless";
+There is no package-owned authentication, database or tenant registry. The stock transport uses same-origin host cookies, refuses redirects and sends bounded commands; the handler requires exact Origin/route matching. Explicit local model configuration and optional **OpenAI Responses OAuth** use the same gateway for conversation, project generation and repair. OAuth requires a host-owned Pi `CredentialStore`, `AuthInteraction` and stable installation UUID; no ambient credentials or automatic login/fallback are used. ChatGPT OAuth may omit `max_output_tokens`: the default rejects that before dispatch unless the host explicitly accepts the lack of a provider-side ceiling.
 
-const builder = createWebBuilderController({
-  transport: createHttpBuilderTransport({ endpoint: "/builder" }),
-});
-const unsubscribe = builder.subscribe(() => render(builder.getSnapshot()));
-await builder.submit("Describe the web project to create");
-await builder.submit("Refine the previous project");
-await builder.stop(); // cancels this standalone builder's backend request
-await builder.reset(); // clears browser/server conversation and refinement context
-unsubscribe();
-await builder.dispose(); // abort and clean up on unmount
-```
+## APIs and limits
 
-The controller is the sole UI state authority. `getSnapshot()` is stable between changes and immutable. `submit()` returns `false` while busy/disposed; invalid input rejects before dispatch. Exchanges contain `requestId`, `message`, streamed `text`, `artifacts`, `status`, optional `phase` and safe `error`. Stop/failure retain partial results. Reset fences stale events. A failed reset disables submission until reset succeeds.
+| Export        | Use                                                                                                                                   |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `/client`     | `WebBuilder`, `useWebBuilder`, controlled `Conversation`/`ChatComposer`/`ChatMessage`/`AssistantMarkdown`, existing `ExperienceEmbed` |
+| `/styles.css` | Scoped package styles and `--wpr-*` host overrides                                                                                    |
+| `/headless`   | Framework-free `createWebBuilderController`, `createHttpBuilderTransport`                                                             |
+| `/pi`         | Server-only gateway, shared bounded `runConversationTurn`, service/session and request handler                                        |
+| `/server`     | Existing generation/compiler/artifact runtime, exact dependency resolver                                                              |
+| `/contracts`  | Browser-safe strict commands/events, schemas, references, errors and limits                                                           |
 
-`/contracts` exports strict `builderCommandSchema`, `builderEventSchema`, `BUILDER_LIMITS` and their types. POST commands are `{type:"submit",requestId,message}`, `{type:"stop",requestId}` (targets the running request), and `{type:"reset",requestId}`. Submit responds with NDJSON; stop/reset respond 204. Every event has the submitted `requestId` and consecutive `sequence` starting at zero:
+See [API configuration and contracts](docs/builder-api.md) for complete usage, injected accounting/runner hooks, OAuth, controlled UI props and limits. [Local examples](examples/README.md) provide interactive experiences and native-SVG charts through the same builder; their domain guidance, synthetic context and approvals are excluded from the published library.
 
-- `started`
-- `text {delta}` — real model text, coalesced into bounded chunks
-- `phase {phase}` — `thinking | generating | repairing | compiling`, no estimated percentages
-- `artifact {artifact}` — confirmed runtime artifact reference
-- exactly one terminal `completed {text}`, `stopped`, or `error {error}`
-
-A sequence-zero `error` with code `BUSY` is an admission rejection. No raw Pi events, arguments, reasoning, credentials or provider/tool error details are sent to the browser. The handler requires exact Origin and canonical route matching, JSON content type and bounded bodies. The transport is same-origin, uses host cookies and refuses redirects. It does not implement application login, session storage, tenant routing or artifact authorization.
-
-## Model configuration and shared runner
-
-`createPiGateway` accepts an explicit Pi `Provider` and `modelId`. Supported wire APIs are `openai-completions` and `openai-responses`. No ambient keys, credential files, harness auth, default provider or transport retries are used. API-key auth requires a nonempty explicit key. For an explicit local model, use Pi's `createProvider` and `openAICompletionsApi()` with a literal loopback endpoint and `auth:{type:"local"}`; local mode forwards no authorization header. Remote endpoints require HTTPS; HTTP is restricted to literal `127.0.0.1`/`[::1]`. Endpoints are server configuration, never request fields. Redirects and SDK environment headers are not forwarded.
-
-The optional OAuth facade supports Pi's **OpenAI Responses** provider using its actual `Models.login`/refresh integration, not a separate OAuth implementation. Other provider auth integrations can inject `PiGateway`:
-
-```ts
-const gateway = createPiGateway({
-  provider: openaiProvider(),
-  modelId: "gpt-4o-mini",
-  auth: {
-    type: "oauth",
-    credentials: hostCredentialStore,
-    deviceUUID: stableHostUUID,
-  },
-  // Explicitly accept that ChatGPT OAuth may omit max_output_tokens.
-  requireProviderTokenCeiling: false,
-});
-await gateway.login(hostAuthInteraction);
-await gateway.logout();
-```
-
-The host owns the Pi `CredentialStore`, `AuthInteraction` and stable installation UUID. OpenAI's Pi login uses a loopback callback on port 1455 or manual callback URL entry; no login occurs automatically. Pi serializes refresh/persistence through the store. Failed refresh preserves the credential and never falls back to a key. Cancellation follows Pi semantics: a refresh that has already rotated a token may finish persisting after its caller cancels. Provider login/refresh networking is Pi-owned, separate from model endpoint restrictions. OAuth tokens are not silently migrated from other applications.
-
-`requireProviderTokenCeiling` defaults **true**: if Pi omits the requested provider output ceiling, dispatch fails closed. Opting out cannot impose a provider-side/billing ceiling; byte/text limits, deadlines and post-response usage checks still apply. Hosts that require a hard provider ceiling must keep it enabled and use a compatible API-key/local configuration. Deterministic tests do not establish live inference or OAuth provider acceptance.
-
-`PiGateway` is injectable: `model()`, `validateCallId(id)` and `stream({stage,maxOutputTokens}, {originals,failure})`. `stage` is `conversation | project`; initial generation and repair share the project stage. An accounted host transport must publish **unrepaired original** calls and withhold terminal success until its own settlement succeeds. `gatewayModelCall(gateway)` adapts that same gateway to the existing runtime.
-
-`runConversationTurn` provides the shared Agent loop for hosts with their own outer conversation. Pass explicit `model`, `system`, `message`, optional Pi `history`, `tools`, `limits`, `signal`, `stream(hooks)`, `validateCallId`, optional pure `validateCall(name,args)` and observation-only `onText(delta)`. Limits are `{rounds,batchCalls,totalCalls,argumentBytes,textChars,toolResultBytes}`. It validates the **whole original batch** before any handler, checks strict schemas without coercion, rejects repeated IDs, runs tools sequentially, latches any failure and waits for abort settlement. Domain validation/accounting remain host closures. The default gateway additionally caps original batches at four and each argument string at 4096 bytes. Source APIs retain their own identity format, including Pi Responses composite IDs.
-
-Default builder turns allow clarification/text-only replies or **one** `generate_project({prompt})` invocation. Successful generation terminates without a paid summary. Any failure ends the turn without outer retry. The existing runtime allows initial project generation plus one validation/build repair, each at 8192 output tokens, with at most 24,000 bytes of prior output in repair context. Actual generation/repair/compile phases come from the runtime; observer errors cannot trigger repair.
-
-## Projects and previews
-
-Share one runtime across generation ingress and artifact routes. `runtime.generate(request,{callModel,instructions?,signal?,onPhase?})` remains available for hosts with existing model plumbing. `runtime.createArtifact(project)`, `runtime.compileProject(project)`, `validateProject` and `projectResponseSchema` are exported from `/server`. Approvals are `{name,version,entry,unsafeEval?}` with an exact installed version and absolute entry resolved by the host. Nothing is approved by default.
-
-```tsx
-"use client";
-import { ExperienceEmbed } from "@philvernon/web-project-runtime/client";
-
-const artifactPath = (id: string) => `/artifacts/${id}`; // keep stable
-<ExperienceEmbed experience={reference} artifactPath={artifactPath} />;
-```
-
-- Enforce **`frame-src blob:`** in the host CSP, not Report-Only, with no other frame destinations. `hasNavigationBoundary` checks this prerequisite. Serve artifacts with `artifactResponse`, including direct navigation, behind host authorization.
-- Server processing parses/compiles only; generated JavaScript is never evaluated there. Projects allow 12 JavaScript files / 24 KiB source, 12 assets / 128 KiB base64, eight dependencies and 192 KiB JSON. Packaged HTML is limited to 8 MiB.
-- Frames have opaque origins and hash-bound script CSP. Workers and nested frames are blocked. Only trusted approvals enable frame-wide `unsafe-eval`. Public networking is allowed: never supply private data to model/generated content. Browser isolation is **not a hard CPU/memory quota**; runaway synchronous code may require closing the tab. Generated content is not guaranteed accessible.
-- Artifacts are process-local: 32 entries, expiring one hour after creation. Preview load timeout is eight seconds; preview sessions last at most 60 seconds. Stop/Reset/unmount dispose frames and Blob URLs.
-- Builder messages are at most 16,384 UTF-8 bytes; encoded HTTP commands at most 20,480 bytes; assistant text at most 16,000 characters. Retained histories hold at most 20 whole exchanges / 256 KiB, model history projection 24,000 bytes. Refinement includes bounded, possibly truncated previous project context. A session admits at most 128 distinct turns before reset. Streams are at most 2048 events / 256 KiB; turns default to 180 seconds, gateway requests 120 seconds. Hosts remain responsible for cross-session rate/spend controls and persistence.
+- A submitted turn allows clarification or **one** generation invocation; success ends without a paid summary. No transport/outer retries or substitute output. The runtime allows initial generation plus one validation/build repair, at 8192 output tokens and at most 24,000 bytes of prior-output repair context.
+- Server processing compiles only; generated JavaScript is never evaluated there. Nothing is dependency-approved by default. Projects are bounded to 12 files / 24 KiB source, 12 assets / 128 KiB base64, eight dependencies and 192 KiB JSON.
+- Enforce **`frame-src blob:`** in the host CSP with no other frame destinations; serve artifacts with `artifactResponse`. Opaque frames block workers/nested frames; trusted approvals alone may enable `unsafe-eval`. Public networking is allowed: never supply private data. Browser isolation is **not a hard CPU/memory quota** and generated output is not guaranteed accessible.
+- Artifacts are process-local: 32 entries, one-hour expiry. Preview load/session deadlines are eight/60 seconds. Builder histories retain at most 20 exchanges / 256 KiB; messages, output and event streams are bounded. Hosts own cross-session rate/spend controls and persistence.
 
 ## Development
 
 ```sh
-npm ci                         # builds dist through prepare
-npm run check
-npm test                       # includes isolated synthetic Pi HTTP/OAuth fixtures
-npm run test:distribution       # external packed install, actual Pi roundtrip, types/bundle boundaries
-npx playwright install chromium
-npm run test:browser            # existing real Chromium preview isolation fixtures
+npm ci                              # prepare builds JavaScript, declarations and CSS
+npm --prefix examples/shared ci     # isolated example consumer
+npm run check                       # strict core/example types and formatting
+npm test                            # engine, headless, auth, UI and example unit tests
+npm run test:distribution            # external pack/Git install, types, CSS, browser boundaries
+npx playwright install chromium     # once, if Chromium is not installed
+npm run test:browser                 # packed full builder + hostile-preview Chromium tests
+npm run test:examples                # host security + both apps' desktop/mobile Pi-loop journeys
 ```
 
-Git dependencies build through `prepare`. Packed installs need no source files or siblings. These commands do not publish, deploy, perform live inference or log in to a provider.
+Git dependencies build through `prepare`; packed installs need no source or sibling files. Tests use isolated synthetic model/auth endpoints and **do not establish live inference or OAuth provider acceptance**. These verification commands do not publish, deploy or log in to a provider.
