@@ -77,7 +77,7 @@ export async function runConversationTurn(options: ConversationTurnOptions) {
       "INVALID_TOOL",
       "Invalid original tool batch; no further action was dispatched.",
     );
-  const usedIds = new Set<string>();
+  const usedProviderIds = new Set<string>();
   const approved = new Map<string, unknown>();
   let originals: OriginalToolCall[] | undefined;
   let round = 0;
@@ -202,15 +202,21 @@ export async function runConversationTurn(options: ConversationTurnOptions) {
         );
       if (!originals || originals.length !== calls.length) throw invalid();
       // Awaited message_end is the whole-original-batch barrier, before ANY Pi preflight/handler.
-      const batchIds = new Set<string>();
+      const batchProviderIds = new Set<string>();
       for (const [index, call] of calls.entries()) {
         const raw = originals[index]!;
+        // Responses item IDs may change while the provider call_id is reused.
+        // Keep the full Pi ID below for original/parsed equality and handler approval.
+        const providerId =
+          options.model.api === "openai-responses"
+            ? raw.id.split("|")[0]!
+            : raw.id;
         const tool = tools.find((candidate) => candidate.name === raw.name);
         if (
           !tool ||
           !options.validateCallId(raw.id) ||
-          usedIds.has(raw.id) ||
-          batchIds.has(raw.id) ||
+          usedProviderIds.has(providerId) ||
+          batchProviderIds.has(providerId) ||
           raw.id !== call.id ||
           raw.name !== call.name ||
           Buffer.byteLength(raw.arguments) > limits.argumentBytes
@@ -228,10 +234,10 @@ export async function runConversationTurn(options: ConversationTurnOptions) {
         )
           throw invalid();
         options.validateCall?.(raw.name, args);
-        batchIds.add(raw.id);
+        batchProviderIds.add(providerId);
         approved.set(raw.id, structuredClone(args));
       }
-      for (const id of batchIds) usedIds.add(id);
+      for (const id of batchProviderIds) usedProviderIds.add(id);
       count += calls.length;
       if (!calls.length && !currentText.trim() && !count)
         throw new ConversationError(

@@ -232,6 +232,62 @@ test("API-specific Responses composite call IDs and original JSON work with actu
   }
 });
 
+test.each([false, true])(
+  "Responses provider call identity is unique across rounds (reused=%s)",
+  async (reused) => {
+    const endpoint = await syntheticEndpoint(
+      (_body, response, index) => {
+        const frames = responsesFrames(
+          index < 2
+            ? { calls: [call(reused ? "call_reused" : `call_${index}`)] }
+            : { text: "Done" },
+        );
+        response.writeHead(200, { "content-type": "text/event-stream" });
+        // The provider call_id may repeat even though the Responses item ID changes.
+        response.end(frames.replaceAll('"id":"fc_0"', `"id":"fc_${index}"`));
+      },
+      "openai-responses",
+      "openai",
+    );
+    const dispatched: string[] = [];
+    const execute: AgentTool["execute"] = async (id) => {
+      dispatched.push(id);
+      return {
+        content: [{ type: "text", text: "echoed" }],
+        details: undefined,
+      };
+    };
+    try {
+      if (reused) {
+        await expect(turn(endpoint, [tool(execute)])).rejects.toMatchObject({
+          code: "INVALID_TOOL",
+        });
+        expect(dispatched).toEqual(["call_reused|fc_0"]);
+        expect(endpoint.requests).toHaveLength(2); // no second handler or model follow-up
+      } else {
+        await expect(turn(endpoint, [tool(execute)])).resolves.toEqual({
+          text: "Done",
+          toolCalls: 2,
+        });
+        expect(dispatched).toEqual(["call_0|fc_0", "call_1|fc_1"]);
+        expect(endpoint.requests).toHaveLength(3);
+        const outputs = (
+          endpoint.requests[2]!.body.input as {
+            type: string;
+            call_id?: string;
+          }[]
+        ).filter((item) => item.type === "function_call_output");
+        expect(outputs.map((item) => item.call_id)).toEqual([
+          "call_0",
+          "call_1",
+        ]);
+      }
+    } finally {
+      await endpoint.close();
+    }
+  },
+);
+
 test("failure latch prevents remaining handlers and paid follow-up; transport failure is not retried", async () => {
   const endpoint = await syntheticEndpoint((_body, response) =>
     sendCompletion(response, { calls: [call(), call("call_second")] }),

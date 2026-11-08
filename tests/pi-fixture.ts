@@ -157,6 +157,7 @@ export async function syntheticEndpoint(
     index: number,
   ) => void | Promise<void>,
   api: "openai-completions" | "openai-responses" = "openai-completions",
+  providerId = "isolated-fixture",
 ) {
   const requests: {
     body: Record<string, unknown>;
@@ -187,7 +188,7 @@ export async function syntheticEndpoint(
   const model: Model<typeof api> = {
     id: "synthetic",
     name: "Synthetic fixture",
-    provider: "isolated-fixture",
+    provider: providerId,
     api,
     baseUrl: `http://127.0.0.1:${address.port}/v1`,
     reasoning: false,
