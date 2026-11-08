@@ -5,6 +5,7 @@ import path from "node:path";
 import { tmpdir } from "node:os";
 import { build } from "esbuild";
 import { installedConsumer, repository, run } from "./installed.js";
+import { packedBuilderProof } from "./packed-builder.js";
 
 const consumer = await installedConsumer();
 try {
@@ -32,6 +33,14 @@ try {
   console.log(
     "PASS packed Node ESM runtime works without sources, React or sibling files",
   );
+  run(
+    "node",
+    ["--input-type=module", "-e", packedBuilderProof],
+    consumer.directory,
+  );
+  console.log(
+    "PASS packed Pi Agent/gateway/service/HTTP/headless tool roundtrip without React (synthetic HTTP model)",
+  );
 
   run(
     "npm",
@@ -53,6 +62,13 @@ try {
     import {createWebProjectRuntime, projectResponseSchema, type ModelCall, type DependencyApproval, type WebProjectRuntime} from '@philvernon/web-project-runtime/server';
     import {artifactSchema, type ArtifactReference, type ArtifactPath, WebProjectError} from '@philvernon/web-project-runtime/contracts';
     import {ExperienceEmbed, type ExperienceEmbedProps} from '@philvernon/web-project-runtime/client';
+    import {createPiGateway, createBuilderService, runConversationTurn, type PiGateway, type BuilderSession, type ConversationLimits} from '@philvernon/web-project-runtime/pi';
+    import {createWebBuilderController, createHttpBuilderTransport, type WebBuilderController} from '@philvernon/web-project-runtime/headless';
+    import type {BuilderCommand, BuilderEvent, BuilderSnapshot} from '@philvernon/web-project-runtime/contracts';
+    export const transport = createHttpBuilderTransport({endpoint:'/builder',origin:'https://consumer.test'});
+    export const controller: WebBuilderController = createWebBuilderController({transport});
+    export type PublicTypes = [PiGateway, BuilderSession, ConversationLimits, BuilderCommand, BuilderEvent, BuilderSnapshot];
+    void [createPiGateway, createBuilderService, runConversationTurn];
     const route: ArtifactPath = id => '/artifacts/'+id;
     const approvals: DependencyApproval[] = [];
     const runtime: WebProjectRuntime = createWebProjectRuntime({dependencies:approvals,mountId:'project',artifactPath:route});
@@ -90,7 +106,7 @@ try {
   console.log(
     "PASS installed declarations: NodeNext, React JSX, no skipLibCheck",
   );
-  for (const entry of ["client", "contracts"]) {
+  for (const entry of ["client", "contracts", "headless"]) {
     const result = await build({
       stdin: {
         contents: `export * from '@philvernon/web-project-runtime/${entry}';`,
@@ -105,15 +121,15 @@ try {
     });
     const names = Object.keys(result.metafile!.inputs).join("\n");
     assert(
-      !/web-project-runtime\/dist\/server|node_modules\/(?:esbuild|acorn)\//.test(
+      !/web-project-runtime\/dist\/(?:server|pi)|node_modules\/(?:esbuild|acorn|@earendil-works|typebox|openai)\//.test(
         names,
       ),
     );
-    if (entry === "contracts") assert(!/node_modules\/react\//.test(names));
+    if (entry !== "client") assert(!/node_modules\/react\//.test(names));
     assert(!/node:(?:fs|path|module|crypto)/.test(result.outputFiles[0]!.text));
   }
   console.log(
-    "PASS client/contracts bundle for browsers; no server/tooling/Node reachability",
+    "PASS client/contracts/headless browser bundles; no server/Pi/auth/Node reachability",
   );
   const packageJson = JSON.parse(
     await readFile(path.join(consumer.packageRoot, "package.json"), "utf8"),
@@ -121,6 +137,8 @@ try {
   assert.deepEqual(Object.keys(packageJson.exports).sort(), [
     "./client",
     "./contracts",
+    "./headless",
+    "./pi",
     "./server",
   ]);
 } finally {

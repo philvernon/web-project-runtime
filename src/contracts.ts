@@ -1,4 +1,24 @@
 /** Browser-safe artifact and lifecycle contract. No server or React imports. */
+export {
+  BUILDER_LIMITS,
+  builderRequestIdSchema,
+  builderMessageSchema,
+  builderCommandSchema,
+  builderPhaseSchema,
+  builderErrorSchema,
+  builderEventSchema,
+  boundBuilderHistory,
+} from "./shared/builder.js";
+export type {
+  BuilderCommand,
+  BuilderSubmit,
+  BuilderPhase,
+  BuilderError,
+  BuilderEvent,
+  BuilderEventData,
+  BuilderExchange,
+  BuilderSnapshot,
+} from "./shared/builder.js";
 export { artifactSchema } from "./shared/schemas.js";
 export type { ArtifactReference } from "./shared/schemas.js";
 export {
