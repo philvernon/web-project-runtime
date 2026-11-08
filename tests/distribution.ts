@@ -61,7 +61,7 @@ try {
     `
     import {createWebProjectRuntime, projectResponseSchema, type ModelCall, type DependencyApproval, type WebProjectRuntime} from '@philvernon/web-project-runtime/server';
     import {artifactSchema, type ArtifactReference, type ArtifactPath, WebProjectError} from '@philvernon/web-project-runtime/contracts';
-    import {ExperienceEmbed, type ExperienceEmbedProps} from '@philvernon/web-project-runtime/client';
+    import {ExperienceEmbed, WebBuilder, useWebBuilder, Conversation, ChatComposer, ChatMessage, AssistantMarkdown, type ExperienceEmbedProps, type WebBuilderProps, type WebBuilderState, type UseWebBuilderOptions, type ConversationProps, type ConversationExchange, type ChatComposerProps, type ChatMessageProps, type ComposerLabels} from '@philvernon/web-project-runtime/client';
     import {createPiGateway, createBuilderService, runConversationTurn, type PiGateway, type BuilderSession, type ConversationLimits} from '@philvernon/web-project-runtime/pi';
     import {createWebBuilderController, createHttpBuilderTransport, type WebBuilderController} from '@philvernon/web-project-runtime/headless';
     import type {BuilderCommand, BuilderEvent, BuilderSnapshot} from '@philvernon/web-project-runtime/contracts';
@@ -76,6 +76,11 @@ try {
     const reference: ArtifactReference = artifactSchema.parse({});
     const props: ExperienceEmbedProps = {experience:reference,artifactPath:route};
     export const element = <ExperienceEmbed {...props}/>;
+    const builderProps: WebBuilderProps = {transport,artifactPath:route,heading:'Build',starters:[{category:'Start',text:'A public request'}]};
+    export const builder = <WebBuilder {...builderProps}/>;
+    export const controlled = <Conversation exchanges={[]} submitMessage={()=>{}} stopWaiting={()=>{}} waiting={false} canSubmit/>;
+    export type UITypes = [WebBuilderState, UseWebBuilderOptions, ConversationProps, ConversationExchange, ChatComposerProps, ChatMessageProps, ComposerLabels];
+    void [useWebBuilder, ChatComposer, ChatMessage, AssistantMarkdown];
     void runtime.generate('public', {callModel:model}).catch(error=>{if(error instanceof WebProjectError) console.log(error.toJSON());});
   `,
   );
@@ -131,6 +136,32 @@ try {
   console.log(
     "PASS client/contracts/headless browser bundles; no server/Pi/auth/Node reachability",
   );
+  const styles = await readFile(
+    path.join(consumer.packageRoot, "dist/styles.css"),
+    "utf8",
+  );
+  assert(styles.includes(".web-builder") && styles.includes("--wpr-accent"));
+  const styled = await build({
+    stdin: {
+      contents: `import '@philvernon/web-project-runtime/styles.css'; export {WebBuilder} from '@philvernon/web-project-runtime/client';`,
+      resolveDir: consumer.directory,
+    },
+    bundle: true,
+    write: false,
+    outdir: "/unused",
+    platform: "browser",
+    format: "esm",
+    logLevel: "silent",
+  });
+  assert(
+    styled.outputFiles.some(
+      (file) =>
+        file.path.endsWith(".css") && file.text.includes(".conversation"),
+    ),
+  );
+  console.log(
+    "PASS packed styled WebBuilder and controlled UI exports; CSS resolves without host framework",
+  );
   const packageJson = JSON.parse(
     await readFile(path.join(consumer.packageRoot, "package.json"), "utf8"),
   );
@@ -140,6 +171,7 @@ try {
     "./headless",
     "./pi",
     "./server",
+    "./styles.css",
   ]);
 } finally {
   await consumer.cleanup();
