@@ -446,6 +446,87 @@ test("reset/dispose fence old stream events and bound retained history; HTTP tra
   ).rejects.toThrow();
 });
 
+test("text reaches the headless snapshot BEFORE the provider terminal event", async () => {
+  let release!: () => void;
+  const endpoint = await syntheticEndpoint(async (_body, response) => {
+    response.writeHead(200, { "content-type": "text/event-stream" });
+    response.write(
+      "data: " +
+        JSON.stringify({
+          id: "fixture",
+          choices: [
+            {
+              index: 0,
+              delta: { role: "assistant", content: "Live text" },
+              finish_reason: null,
+            },
+          ],
+        }) +
+        "\n\n",
+    );
+    await new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    response.end(
+      "data: " +
+        JSON.stringify({
+          id: "fixture",
+          choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+        }) +
+        "\n\ndata: [DONE]\n\n",
+    );
+  });
+  const session = createBuilderService({
+    runtime: createWebProjectRuntime(options),
+    gateway: endpoint.gateway,
+  }).createSession();
+  const controller = createWebBuilderController({
+    transport: connect(session),
+  });
+  try {
+    const pending = controller.submit("Clarify");
+    await vi.waitFor(() =>
+      expect(controller.getSnapshot().exchanges[0]).toMatchObject({
+        text: "Live text",
+        status: "waiting",
+      }),
+    );
+    release();
+    await pending;
+    expect(controller.getSnapshot().exchanges[0]!.status).toBe("completed");
+  } finally {
+    release?.();
+    await controller.dispose();
+    await session.dispose();
+    await endpoint.close();
+  }
+});
+
+test("a subscriber can Stop immediately on submit without a transport dispatch or early settlement", async () => {
+  const submit = vi.fn(async function* () {
+    yield { type: "started" as const, requestId: "unexpected_id", sequence: 0 };
+  });
+  const transport: BuilderTransport = {
+    submit,
+    stop: async () => undefined,
+    reset: async () => undefined,
+  };
+  const controller = createWebBuilderController({ transport });
+  let stopped: Promise<void> | undefined;
+  controller.subscribe(() => {
+    if (controller.getSnapshot().status === "waiting")
+      stopped = controller.stop();
+  });
+  await controller.submit("Stop before dispatch");
+  await stopped;
+  expect(submit).not.toHaveBeenCalled();
+  expect(controller.getSnapshot()).toMatchObject({
+    status: "stopped",
+    canSubmit: true,
+  });
+  await controller.dispose();
+});
+
 test("phase observers cannot trigger an additional paid repair", async () => {
   const runtime = createWebProjectRuntime(options);
   const model = vi.fn(async () => ({ text: JSON.stringify(project()) }));

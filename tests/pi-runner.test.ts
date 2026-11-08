@@ -1,5 +1,6 @@
 import { expect, test, vi } from "vitest";
 import { Type } from "typebox";
+import { createAssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import {
   runConversationTurn,
@@ -62,6 +63,75 @@ function turn(
     ...overrides,
   });
 }
+
+test("host terminal settlement is a barrier before tools; settlement failure latches without dispatch", async () => {
+  for (const failSettlement of [false, true]) {
+    let release!: () => void;
+    const settlement = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const endpoint = await syntheticEndpoint((_body, response) =>
+      sendCompletion(response, { calls: [call()] }),
+    );
+    const execute = vi.fn(async () => ({
+      content: [],
+      details: undefined,
+      terminate: true,
+    }));
+    let terminalWaiting = false;
+    try {
+      const pending = turn(endpoint, [tool(execute)], {
+        stream: (hooks) => (model, context, options) => {
+          const output = createAssistantMessageEventStream();
+          const upstream = endpoint.gateway.stream(
+            { stage: "conversation", maxOutputTokens: 2048 },
+            hooks,
+          )(model, context, options);
+          void (async () => {
+            for await (const event of await upstream) {
+              if (event.type === "done") {
+                terminalWaiting = true;
+                await settlement;
+                if (failSettlement) {
+                  hooks.failure(
+                    Error("Synthetic accounting settlement failed"),
+                  );
+                  output.push({
+                    type: "error",
+                    reason: "error",
+                    error: {
+                      ...event.message,
+                      content: [],
+                      stopReason: "error",
+                    },
+                  });
+                  output.end();
+                  return;
+                }
+              }
+              output.push(event);
+            }
+            output.end();
+          })();
+          return output;
+        },
+      });
+      const outcome = pending.then(
+        () => "completed",
+        () => "failed",
+      );
+      await vi.waitFor(() => expect(terminalWaiting).toBe(true));
+      expect(execute).not.toHaveBeenCalled();
+      release();
+      expect(await outcome).toBe(failSettlement ? "failed" : "completed");
+      expect(execute).toHaveBeenCalledTimes(failSettlement ? 0 : 1);
+      expect(endpoint.requests).toHaveLength(1);
+    } finally {
+      release();
+      await endpoint.close();
+    }
+  }
+});
 
 test("actual Pi Agent and HTTP protocol perform sequential tools then follow-up; explicit local auth has no ambient headers", async () => {
   const endpoint = await syntheticEndpoint((_body, response, index) =>

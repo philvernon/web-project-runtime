@@ -109,14 +109,6 @@ export function createWebBuilderController(options: {
       ]);
       const running = { requestId, abort, done: Promise.resolve(true) };
       active = running;
-      update({
-        status: "waiting",
-        canSubmit: false,
-        exchanges: boundBuilderHistory([
-          ...snapshot.exchanges,
-          { requestId, message, text: "", artifacts: [], status: "waiting" },
-        ]),
-      });
       running.done = Promise.resolve().then(async () => {
         let next = 0;
         let terminal = false;
@@ -125,6 +117,7 @@ export function createWebBuilderController(options: {
         let streamBytes = 0;
         let protocolFailed = false;
         try {
+          signal.throwIfAborted();
           for await (const raw of options.transport.submit(
             { type: "submit", requestId, message },
             signal,
@@ -229,6 +222,14 @@ export function createWebBuilderController(options: {
             update({ ...snapshot, canSubmit: true });
         }
         return true;
+      });
+      update({
+        status: "waiting",
+        canSubmit: false,
+        exchanges: boundBuilderHistory([
+          ...snapshot.exchanges,
+          { requestId, message, text: "", artifacts: [], status: "waiting" },
+        ]),
       });
       return running.done;
     },

@@ -109,6 +109,7 @@ export function createBuilderService(options: BuilderServiceOptions) {
             let generationStarted = false;
             let observerFailed = false;
             let pendingText = "";
+            let firstText = true;
             let text = "";
             const artifacts: BuilderExchange["artifacts"][number][] = [];
             let status: BuilderExchange["status"] = "waiting";
@@ -195,7 +196,8 @@ export function createBuilderService(options: BuilderServiceOptions) {
                 onText(delta) {
                   text += delta;
                   pendingText += delta;
-                  if (pendingText.length >= 128) {
+                  if (firstText || pendingText.length >= 128) {
+                    firstText = false;
                     try {
                       flush();
                     } catch {
