@@ -82,7 +82,7 @@ A sequence-zero `error` with code `BUSY` is an admission rejection. No raw Pi ev
 
 `createPiGateway` accepts an explicit Pi `Provider` and `modelId`. Supported wire APIs are `openai-completions` and `openai-responses`. No ambient keys, credential files, harness auth, default provider or transport retries are used. API-key auth requires a nonempty explicit key. For an explicit local model, use Pi's `createProvider` and `openAICompletionsApi()` with a literal loopback endpoint and `auth:{type:"local"}`; local mode forwards no authorization header. Remote endpoints require HTTPS; HTTP is restricted to literal `127.0.0.1`/`[::1]`. Endpoints are server configuration, never request fields. Redirects and SDK environment headers are not forwarded.
 
-Optional OAuth uses the provider's actual Pi `Models.login`/refresh integration, not a separate OAuth implementation:
+The optional OAuth facade supports Pi's **OpenAI Responses** provider using its actual `Models.login`/refresh integration, not a separate OAuth implementation. Other provider auth integrations can inject `PiGateway`:
 
 ```ts
 const gateway = createPiGateway({

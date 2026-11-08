@@ -272,6 +272,17 @@ test("explicit API key alone authorizes synthetic endpoint; missing keys/models 
         auth: { type: "local" },
       }),
     ).toThrow();
+    expect(() =>
+      createPiGateway({
+        provider: { ...openaiProvider(), id: "unsupported-oauth" },
+        modelId: "gpt-4o-mini",
+        auth: {
+          type: "oauth",
+          credentials: new InMemoryCredentialStore(),
+          deviceUUID,
+        },
+      }),
+    ).toThrow("OAuth facade supports the Pi OpenAI Responses provider");
   } finally {
     await endpoint.close();
   }

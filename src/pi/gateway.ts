@@ -25,6 +25,7 @@ export type PiGatewayOptions = {
   /** Explicit Pi provider factory result; no provider registry or fallback is loaded. */
   provider: Provider;
   modelId: string;
+  /** The built-in OAuth facade supports Pi's OpenAI Responses provider. Other auth integrations can inject PiGateway. */
   auth:
     | { type: "apiKey"; key: string }
     | { type: "local" }
@@ -107,6 +108,13 @@ export function createPiGateway(options: PiGatewayOptions): PiGateway & {
   if (!model || !["openai-completions", "openai-responses"].includes(model.api))
     throw Error(
       "Select an explicit supported Pi chat model (OpenAI Completions or Responses API)",
+    );
+  if (
+    auth.type === "oauth" &&
+    (options.provider.id !== "openai" || model.api !== "openai-responses")
+  )
+    throw Error(
+      "The OAuth facade supports the Pi OpenAI Responses provider; inject PiGateway for other provider auth",
     );
   const endpoint = endpointFor(model, auth.type === "local");
   const timeoutMs = options.timeoutMs ?? 120_000;
