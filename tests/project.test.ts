@@ -61,6 +61,40 @@ test("real dependency, transitive package, relative modules and assets compile w
   }
 });
 
+test("exact source/asset boundaries are accepted and oversized dependency output cannot exceed HTML bound", async () => {
+  const input = project();
+  input.files[0]!.code += " ".repeat(
+    MAX_SOURCE_BYTES - Buffer.byteLength(input.files[0]!.code),
+  );
+  input.assets = [
+    {
+      path: "data.txt",
+      mediaType: "text/plain",
+      base64: Buffer.alloc(96 * 1024).toString("base64"),
+    },
+  ];
+  expect(validateProject(input).files[0]!.code).toHaveLength(MAX_SOURCE_BYTES);
+  const installation = await syntheticInstallation(
+    `export const huge = ${JSON.stringify("x".repeat(MAX_FRAME_BYTES))};`,
+  );
+  try {
+    const runtime = createWebProjectRuntime({
+      ...options,
+      dependencies: [installation.approval],
+    });
+    const oversized = project(
+      "import {huge} from 'fixture-library'; document.body.textContent=huge;",
+    );
+    oversized.dependencies = [{ name: "fixture-library", version: "1.2.3" }];
+    await expect(runtime.createArtifact(oversized)).rejects.toMatchObject({
+      code: "BUILD_REJECTED",
+      message: "Artifact exceeds bounds.",
+    });
+  } finally {
+    await installation.cleanup();
+  }
+});
+
 test("hash CSP, safe serialization, immutable identity and inert direct responses", async () => {
   const runtime = createWebProjectRuntime(options);
   const input = project(

@@ -49,7 +49,7 @@ const frameMessageSchema = z
   .object({
     channel: z.literal("experience-v1"),
     instance: z.string().uuid(),
-    id: z.string(),
+    id: z.string().regex(/^[a-f0-9]{64}$/),
     type: z.enum(["ready", "complete", "error"]),
   })
   .strict();
