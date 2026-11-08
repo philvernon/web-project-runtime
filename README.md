@@ -2,7 +2,7 @@
 
 Generate JavaScript web projects with an LLM, validate and bundle them, and render them in a sandboxed browser frame. The caller supplies model access, application instructions and approved dependencies.
 
-Node.js 24.22.0, npm 11.19.1. ESM with TypeScript declarations. React 19 is optional.
+Node.js >=24.18.0 <25 and npm >=11.16.0 <12. ESM with TypeScript declarations. React 19 is optional.
 
 ## Usage
 
