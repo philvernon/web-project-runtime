@@ -1,16 +1,42 @@
 # Web project runtime
 
-Generate JavaScript web projects with an LLM, validate and bundle them, and render them in a sandboxed browser frame. The caller supplies model access, application instructions and approved dependencies.
+A reusable Pi-backed web builder: conversation UI, streamed generation and refinement, validated compilation, and sandboxed inline previews. Hosts supply explicit model configuration, application instructions, public context and exact dependency approvals. No custom model loop, filesystem/shell/browser-automation tools, Next or Tailwind setup is needed.
 
-Node.js >=24.18.0 <25 and npm >=11.16.0 <12. ESM with TypeScript declarations. React 19 is optional.
+Node.js **>=24.18.0 <25**, npm **>=11.16.0 <12**. ESM with TypeScript declarations. React 19 is optional; server and headless APIs work without it.
 
-## Usage
+## Full builder
+
+```tsx
+import { WebBuilder } from "@philvernon/web-project-runtime/client";
+import { createHttpBuilderTransport } from "@philvernon/web-project-runtime/headless";
+import "@philvernon/web-project-runtime/styles.css";
+
+// Keep these references stable; match the server's artifact route.
+const transport = createHttpBuilderTransport({ endpoint: "/builder" });
+const artifactPath = (id: string) => `/artifacts/${id}`;
+
+export function Builder() {
+  return (
+    <div style={{ height: "100dvh" }}>
+      <WebBuilder transport={transport} artifactPath={artifactPath} />
+    </div>
+  );
+}
+```
+
+The builder renders ordered conversation, real streamed text/work phases, safe Markdown, errors, Stop/Reset and matching sandboxed artifacts. The headless controller is its single state authority; unmount/reset abort requests and dispose previews.
 
 ```ts
+// Server only
+import { openaiProvider } from "@earendil-works/pi-ai/providers/openai";
+import {
+  createPiGateway,
+  createBuilderService,
+  handleBuilderRequest,
+} from "@philvernon/web-project-runtime/pi";
 import {
   createWebProjectRuntime,
   artifactResponse,
-  projectResponseSchema,
 } from "@philvernon/web-project-runtime/server";
 
 const runtime = createWebProjectRuntime({
@@ -18,48 +44,56 @@ const runtime = createWebProjectRuntime({
   mountId: "project",
   artifactPath: (id) => `/artifacts/${id}`,
 });
-
-const reference = await runtime.generate("Your request and public context", {
-  instructions: "Application guidance",
-  callModel, // ({ system, user, maxOutputTokens, signal? }) => Promise<{ text }>
-  signal,
+const gateway = createPiGateway({
+  provider: openaiProvider(),
+  modelId: "gpt-4o-mini",
+  auth: { type: "apiKey", key: operatorSuppliedKey },
 });
+const service = createBuilderService({ runtime, gateway });
+const session = service.createSession(); // host-owned authenticated scope/lifetime
 
-// In the application's artifact GET handler:
-return artifactResponse(runtime.getArtifact(id));
+// POST /builder: authenticate and select the session BEFORE calling.
+const response = await handleBuilderRequest(request, {
+  session,
+  exactOrigin: "https://your-app.example",
+  path: "/builder",
+});
+// GET /artifacts/:id: authorize access through the same scope.
+const artifact = artifactResponse(runtime.getArtifact(id));
+// On host session removal: await session.dispose();
 ```
 
-Share one runtime instance across generation and artifact routes. The model callback owns transport, authentication and accounting; use `projectResponseSchema` for structured output. Generation allows one validation/build repair, not provider retries or fallback.
+There is no package-owned authentication, database or tenant registry. The stock transport uses same-origin host cookies, refuses redirects and sends bounded commands; the handler requires exact Origin/route matching. Explicit local model configuration and optional **OpenAI Responses OAuth** use the same gateway for conversation, project generation and repair. OAuth requires a host-owned Pi `CredentialStore`, `AuthInteraction` and stable installation UUID; no ambient credentials or automatic login/fallback are used. ChatGPT OAuth may omit `max_output_tokens`: the default rejects that before dispatch unless the host explicitly accepts the lack of a provider-side ceiling.
 
-For supplied projects, use `runtime.createArtifact(project)` or `runtime.compileProject(project)`. `validateProject` is also exported from `/server`. Approve libraries explicitly with `{ name, version, entry, unsafeEval? }`; resolve the absolute entry in the consuming application. The runtime verifies installed versions and confines dependency resolution. Nothing is approved by default.
+## APIs and limits
 
-```tsx
-"use client";
-import { ExperienceEmbed } from "@philvernon/web-project-runtime/client";
+| Export        | Use                                                                                                                                   |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `/client`     | `WebBuilder`, `useWebBuilder`, controlled `Conversation`/`ChatComposer`/`ChatMessage`/`AssistantMarkdown`, existing `ExperienceEmbed` |
+| `/styles.css` | Scoped package styles and `--wpr-*` host overrides                                                                                    |
+| `/headless`   | Framework-free `createWebBuilderController`, `createHttpBuilderTransport`                                                             |
+| `/pi`         | Server-only gateway, shared bounded `runConversationTurn`, service/session and request handler                                        |
+| `/server`     | Existing generation/compiler/artifact runtime, exact dependency resolver                                                              |
+| `/contracts`  | Browser-safe strict commands/events, schemas, references, errors and limits                                                           |
 
-// Keep this function stable and define it locally, not across an RSC boundary.
-const artifactPath = (id: string) => `/artifacts/${id}`;
-<ExperienceEmbed experience={reference} artifactPath={artifactPath} />;
-```
+See [API configuration and contracts](docs/builder-api.md) for complete usage, injected accounting/runner hooks, OAuth, controlled UI props and limits. [Local examples](examples/README.md) provide interactive experiences and native-SVG charts through the same builder; their domain guidance, synthetic context and approvals are excluded from the published library.
 
-`/contracts` exports browser-safe artifact schemas, errors, limits and lifecycle validation. Handle `WebProjectError` using its `status` and `toJSON()`.
-
-## Browser isolation and limits
-
-- Enforce **`frame-src blob:`** in the host response CSP, not Report-Only; allow no other frame destinations. Other host CSP directives can prevent execution. `hasNavigationBoundary` checks this prerequisite in host tests. Serve HTML through `artifactResponse`, including on direct navigation, and apply application authorization and request controls.
-- Server processing parses and bundles; it never executes generated code or runs generated commands. Projects allow 12 JavaScript files / 24 KiB source, 12 assets / 128 KiB base64, eight dependencies and 192 KiB JSON. Packaged HTML is limited to 8 MiB.
-- Frames use an opaque origin and hash-bound script CSP. Workers and nested frames are blocked. Only trusted dependency approvals can enable `unsafe-eval`; that exception applies to the whole frame. Public networking is allowed and may disclose IP/public interaction data. Never provide private data to generated content or model context.
-- Artifacts are process-local: 32 entries, expiring one hour after creation. Load timeout is eight seconds; sessions last at most 60 seconds. Stop, Reset and unmount dispose frames and revoke Blob URLs. Browser isolation is **not a hard CPU/memory quota**; synchronous runaway code may require closing the tab. Generated content is not guaranteed accessible.
+- A submitted turn allows clarification or **one** generation invocation; success ends without a paid summary. No transport/outer retries or substitute output. The runtime allows initial generation plus one validation/build repair, at 8192 output tokens and at most 24,000 bytes of prior-output repair context.
+- Server processing compiles only; generated JavaScript is never evaluated there. Nothing is dependency-approved by default. Projects are bounded to 12 files / 24 KiB source, 12 assets / 128 KiB base64, eight dependencies and 192 KiB JSON.
+- Enforce **`frame-src blob:`** in the host CSP with no other frame destinations; serve artifacts with `artifactResponse`. Opaque frames block workers/nested frames; trusted approvals alone may enable `unsafe-eval`. Public networking is allowed: never supply private data. Browser isolation is **not a hard CPU/memory quota** and generated output is not guaranteed accessible.
+- Artifacts are process-local: 32 entries, one-hour expiry. Preview load/session deadlines are eight/60 seconds. Builder histories retain at most 20 exchanges / 256 KiB; messages, output and event streams are bounded. Hosts own cross-session rate/spend controls and persistence.
 
 ## Development
 
 ```sh
-npm ci                         # builds dist through prepare
-npm run check
-npm test
-npm run test:distribution       # external packed install, types and browser bundles
-npx playwright install chromium
-npm run test:browser            # real Chromium, isolated fixtures
+npm ci                              # prepare builds JavaScript, declarations and CSS
+npm --prefix examples/shared ci     # isolated example consumer
+npm run check                       # strict core/example types and formatting
+npm test                            # engine, headless, auth, UI and example unit tests
+npm run test:distribution            # external pack/Git install, types, CSS, browser boundaries
+npx playwright install chromium     # once, if Chromium is not installed
+npm run test:browser                 # packed full builder + hostile-preview Chromium tests
+npm run test:examples                # host security + both apps' desktop/mobile Pi-loop journeys
 ```
 
-Git dependencies build through `prepare`. Packed installs contain emitted JavaScript, declarations and this README; they do not need source files or React unless using `/client`. These commands do not publish the package.
+Git dependencies build through `prepare`; packed installs need no source or sibling files. Tests use isolated synthetic model/auth endpoints and **do not establish live inference or OAuth provider acceptance**. These verification commands do not publish, deploy or log in to a provider.

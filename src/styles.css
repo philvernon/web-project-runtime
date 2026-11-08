@@ -1,0 +1,308 @@
+/* Optional package styling. All selectors are scoped to library-owned UI.
+   Host overrides: --wpr-font, --wpr-text, --wpr-muted, --wpr-background,
+   --wpr-surface, --wpr-user, --wpr-border, --wpr-accent, --wpr-on-accent,
+   --wpr-focus, --wpr-error, --wpr-width, --wpr-radius. */
+:where([data-wpr-ui]) {
+  box-sizing: border-box;
+  color: var(--wpr-text, #202b36);
+  font-family: var(--wpr-font, system-ui, sans-serif);
+  font-size: 1rem;
+  line-height: 1.5;
+}
+:where([data-wpr-ui]) *,
+:where([data-wpr-ui]) *::before,
+:where([data-wpr-ui]) *::after {
+  box-sizing: border-box;
+}
+:where([data-wpr-ui]) button,
+:where([data-wpr-ui]) textarea {
+  font: inherit;
+  color: inherit;
+}
+:where([data-wpr-ui]) button {
+  min-height: 44px;
+  border: 1px solid var(--wpr-border, #b7c3ce);
+  border-radius: var(--wpr-radius, 8px);
+  padding: 0.5rem 0.85rem;
+  background: var(--wpr-background, #fff);
+  cursor: pointer;
+}
+:where([data-wpr-ui]) button:hover:not(:disabled) {
+  background: var(--wpr-surface, #eef3f7);
+}
+:where([data-wpr-ui]) button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+:where([data-wpr-ui]) :focus-visible {
+  outline: 2px solid var(--wpr-focus, #235eae);
+  outline-offset: 3px;
+}
+:where([data-wpr-ui]) .wpr-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+.web-builder:where([data-wpr-ui]) {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  background: var(--wpr-background, #fff);
+}
+:where([data-wpr-ui]) .builder-controls {
+  display: flex;
+  flex-shrink: 0;
+  justify-content: flex-end;
+  width: 100%;
+  max-width: var(--wpr-width, 850px);
+  margin-inline: auto;
+  padding: 0.5rem 1.5rem;
+}
+.conversation:where([data-wpr-ui]) {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+}
+:where([data-wpr-ui]) .thread {
+  position: relative;
+  flex: 1;
+  min-height: 5rem;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
+  scroll-padding: 0.5rem;
+  outline-offset: -2px;
+}
+:where([data-wpr-ui]) .conversation-content {
+  width: 100%;
+  min-width: 0;
+  max-width: var(--wpr-width, 850px);
+  margin-inline: auto;
+  padding: 0.75rem 1.5rem 1.5rem;
+}
+:where([data-wpr-ui]) .conversation-introduction h1 {
+  margin: 0 0 0.75rem;
+  font-size: 1.5rem;
+  font-weight: 650;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+:where([data-wpr-ui]) .conversation-introduction p {
+  max-width: 54ch;
+  margin: 0 0 1.5rem;
+  color: var(--wpr-muted, #526375);
+}
+:where([data-wpr-ui]) .conversation-starters ul {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+:where([data-wpr-ui]) .conversation-starters li {
+  display: flex;
+  min-width: 0;
+}
+:where([data-wpr-ui]) .conversation-starters button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+  width: 100%;
+  padding: 1rem;
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+:where([data-wpr-ui]) .starter-category {
+  color: var(--wpr-muted, #526375);
+  font-size: 0.85rem;
+}
+:where([data-wpr-ui]) .conversation-messages,
+:where([data-wpr-ui]) .conversation-messages article {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  min-width: 0;
+}
+:where([data-wpr-ui]) .conversation-messages {
+  margin-top: 1.5rem;
+}
+:where([data-wpr-ui]) .conversation-messages:empty {
+  margin-top: 0;
+}
+.message:where([data-wpr-ui]) {
+  min-width: 0;
+  padding-bottom: 0.5rem;
+  overflow-wrap: anywhere;
+}
+.message:where([data-wpr-ui])[data-role="user"] {
+  align-self: flex-end;
+  max-width: 85%;
+  border-radius: 14px 14px 4px 14px;
+  padding: 0.75rem 1rem;
+  background: var(--wpr-user, #eef3f7);
+}
+.message:where([data-wpr-ui]) > h2 {
+  margin: 0 0 0.4rem;
+  color: var(--wpr-muted, #526375);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+:where([data-wpr-ui]) .message-text {
+  white-space: pre-wrap;
+}
+:where([data-wpr-ui]) .conversation-progress,
+:where([data-wpr-ui]) .notice {
+  margin: 0.5rem 0;
+  color: var(--wpr-muted, #526375);
+}
+:where([data-wpr-ui]) .notice[role="alert"],
+:where([data-wpr-ui]) .input-error {
+  border-inline-start: 3px solid var(--wpr-error, #a22d28);
+  padding-inline-start: 0.6rem;
+  color: var(--wpr-error, #a22d28);
+}
+.chat-composer:where([data-wpr-ui]) {
+  flex-shrink: 0;
+  width: 100%;
+  max-width: var(--wpr-width, 850px);
+  margin-inline: auto;
+  padding: 0.75rem 1.5rem max(12px, env(safe-area-inset-bottom));
+  background: var(--wpr-background, #fff);
+}
+:where([data-wpr-ui]) .request-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 0.5rem;
+}
+:where([data-wpr-ui]) .request-status p {
+  flex: 1 1 160px;
+  margin: 0;
+  color: var(--wpr-muted, #526375);
+  font-size: 0.875rem;
+}
+:where([data-wpr-ui]) .composer-input {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  align-items: center;
+  gap: 0.75rem;
+  border: 1px solid var(--wpr-border, #b7c3ce);
+  border-radius: var(--wpr-radius, 8px);
+  padding: 0.75rem;
+  background: var(--wpr-surface, #eef3f7);
+}
+:where([data-wpr-ui]) .composer-input textarea {
+  display: block;
+  min-width: 0;
+  min-height: 52px;
+  max-height: 9rem;
+  width: 100%;
+  resize: vertical;
+  border: 0;
+  padding: 0.25rem;
+  background: transparent;
+}
+:where([data-wpr-ui]) .composer-input textarea::placeholder {
+  color: var(--wpr-muted, #526375);
+  opacity: 1;
+}
+:where([data-wpr-ui]) .composer-send {
+  width: 44px;
+  padding: 0.5rem;
+  color: var(--wpr-on-accent, #fff);
+  background: var(--wpr-accent, #235eae);
+}
+:where([data-wpr-ui]) .composer-send:hover:not(:disabled) {
+  color: var(--wpr-accent, #235eae);
+}
+:where([data-wpr-ui]) .composer-send svg {
+  display: block;
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.markdown:where([data-wpr-ui]) {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.markdown:where([data-wpr-ui]) > :first-child {
+  margin-top: 0;
+}
+.markdown:where([data-wpr-ui]) > :last-child {
+  margin-bottom: 0;
+}
+.markdown:where([data-wpr-ui]) h3 {
+  margin: 1rem 0 0.5rem;
+  font-size: 1.125rem;
+}
+.markdown:where([data-wpr-ui]) a {
+  color: var(--wpr-accent, #235eae);
+  text-underline-offset: 0.15em;
+}
+.markdown:where([data-wpr-ui]) pre {
+  max-width: 100%;
+  overflow: auto;
+  padding: 1rem;
+  border: 1px solid var(--wpr-border, #b7c3ce);
+  border-radius: var(--wpr-radius, 8px);
+  background: var(--wpr-surface, #eef3f7);
+}
+.markdown:where([data-wpr-ui]) blockquote {
+  margin-inline: 0;
+  padding-inline-start: 1rem;
+  border-inline-start: 3px solid var(--wpr-border, #b7c3ce);
+}
+:where([data-wpr-ui]) .builder-artifact {
+  min-width: 0;
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--wpr-border, #b7c3ce);
+  border-radius: var(--wpr-radius, 8px);
+}
+:where([data-wpr-ui]) .builder-artifact iframe {
+  display: block;
+}
+:where([data-wpr-ui]) .builder-artifact p {
+  font-size: 0.875rem;
+}
+:where([data-wpr-ui]) .builder-artifact h3 {
+  margin-top: 0;
+}
+@media (max-width: 480px) {
+  :where([data-wpr-ui]) .conversation-content,
+  .chat-composer:where([data-wpr-ui]),
+  :where([data-wpr-ui]) .builder-controls {
+    padding-inline: 1rem;
+  }
+  :where([data-wpr-ui]) .conversation-starters ul {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  :where([data-wpr-ui]) .builder-artifact {
+    padding: 0.5rem;
+  }
+}
+@media (forced-colors: active) {
+  :where([data-wpr-ui]) button,
+  :where([data-wpr-ui]) .composer-input {
+    border: 1px solid ButtonText;
+  }
+}

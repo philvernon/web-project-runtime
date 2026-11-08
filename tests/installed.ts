@@ -40,11 +40,16 @@ export async function installedConsumer() {
     assert(
       files.includes("dist/server.js") &&
         files.includes("dist/client.js") &&
-        files.includes("dist/contracts.d.ts"),
+        files.includes("dist/contracts.d.ts") &&
+        files.includes("dist/styles.css") &&
+        files.includes("dist/client/markdown-notices.txt") &&
+        files.includes("docs/builder-api.md"),
     );
     assert(
       files.every((file) =>
-        /^(?:dist\/[a-z/.-]+\.(?:js|ts)|README\.md|package\.json)$/.test(file),
+        /^(?:dist\/[a-z/.-]+\.(?:js|ts|css)|dist\/client\/markdown-notices\.txt|docs\/builder-api\.md|README\.md|package\.json)$/.test(
+          file,
+        ),
       ),
       `Unexpected packed file: ${files.join(", ")}`,
     );
