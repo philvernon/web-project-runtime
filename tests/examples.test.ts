@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { configuredGateway } from "../examples/shared/model.js";
 import { experiences } from "../examples/experiences/config.js";
-import { charts } from "../examples/charts/config.js";
+import { charts, deliveryData } from "../examples/charts/config.js";
 
 const local = {
   WEB_BUILDER_MODEL: "synthetic-test-only",
@@ -53,7 +53,7 @@ describe("example-only operator configuration (no network)", () => {
     expect(charts.dependencies).toEqual([]);
     expect(experiences.instructions).toContain("Canvas");
     expect(charts.instructions).toContain("SVG");
-    expect(JSON.parse(charts.publicContext).rows).toHaveLength(5);
+    expect(deliveryData.rows).toHaveLength(5);
     for (const example of [experiences, charts]) {
       expect(example.presentation.starters.length).toBeGreaterThan(0);
       expect(example.presentation).not.toHaveProperty("instructions");

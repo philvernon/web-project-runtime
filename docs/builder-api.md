@@ -78,6 +78,111 @@ The controller is the sole UI state authority. `getSnapshot()` is stable between
 
 A sequence-zero `error` with code `BUSY` is an admission rejection. No raw Pi events, arguments, reasoning, credentials or provider/tool error details are sent to the browser. The handler requires exact Origin and canonical route matching, JSON content type and bounded bodies. The transport is same-origin, uses host cookies and refuses redirects. It does not implement application login, session storage, tenant routing or artifact authorization.
 
+## Configuring tools (server only)
+
+`createBuilderService` accepts a synchronous `tools(context)` factory returning `BuilderToolSet`: `{tools: readonly AgentTool[], validateCall?: (name, args) => void}`. It **replaces**, rather than appends to, the default toolset. Return `{ tools: [] }` to disable all tools. The factory runs once per admitted turn, not per model round. It can select tools using host-owned policy and capture turn-local public lookup state. There is no workflow API, manifest-based authority or ambient tool installation.
+
+`BuilderToolContext<Settings>` contains `requestId`, untrusted `message`, untrusted `publicContext`, the turn's `signal`, and `settings`. `toolSettings` is generic host-owned JSON: validated for JSON values and size, copied and deeply frozen at **service creation**. It defaults to `{}` and is never automatically put in a model request or browser event. Validate application-specific setting semantics in host code before service creation. Instructions, context, limits and the factory reference are also captured at service creation. Tool names/descriptions/schemas/execute references are validated and snapshotted **per turn before model dispatch**. To change service policy, create a new service; to vary the enabled set per turn, select inside the factory using trusted host state.
+
+Add a tool by defining a schema and handler in host code and returning it from this factory. No UI, HTTP command, runtime or agent-loop edits are needed:
+
+```ts
+import { Type, type Static } from "typebox";
+import {
+  createBuilderService,
+  createGenerationTool,
+  type AgentTool,
+} from "@philvernon/web-project-runtime/pi";
+
+// Public, illustrative data owned by this host, not a library capability.
+const publicRows = [
+  { label: "A", value: 42 },
+  { label: "B", value: 51 },
+];
+const lookupParameters = Type.Object(
+  { count: Type.Integer({ minimum: 1, maximum: 50 }) },
+  { additionalProperties: false },
+);
+
+// runtime and gateway are configured as above, on the server.
+const service = createBuilderService({
+  runtime,
+  gateway,
+  toolSettings: { generationEnabled: true, maxPublicItems: 2 },
+  toolLimits: { rounds: 3, batchCalls: 2, totalCalls: 2 },
+  tools(context) {
+    let selectedRows: typeof publicRows = [];
+    const lookup: AgentTool<typeof lookupParameters> = {
+      name: "lookup_public",
+      label: "Look up public values",
+      description: "Read the host's illustrative public values, not live data.",
+      parameters: lookupParameters,
+      async execute(_id, args) {
+        context.signal.throwIfAborted();
+        selectedRows = publicRows.slice(0, args.count);
+        return {
+          content: [{ type: "text", text: JSON.stringify(selectedRows) }],
+          details: undefined,
+        };
+      },
+    };
+    const tools: AgentTool[] = [lookup];
+    if (context.settings.generationEnabled) {
+      tools.push(
+        createGenerationTool(context, {
+          name: "build_public",
+          label: "Build public project",
+          description:
+            "Build or refine a project from a brief and selected public values.",
+          parameters: Type.Object(
+            { brief: Type.String({ minLength: 1, maxLength: 3000 }) },
+            { additionalProperties: false },
+          ),
+          prompt: (args) =>
+            JSON.stringify({ brief: args.brief, publicRows: selectedRows }),
+          instructions:
+            "Label supplied values as illustrative. Do not claim live reporting.",
+        }),
+      );
+    }
+    return {
+      tools,
+      // Pure synchronous host preflight. Throw to deny the WHOLE batch.
+      validateCall(name, args) {
+        if (
+          name === "lookup_public" &&
+          (args as Static<typeof lookupParameters>).count >
+            context.settings.maxPublicItems
+        )
+          throw new Error("Public lookup exceeds host policy");
+      },
+    };
+  },
+});
+```
+
+`createGenerationTool(context)` creates the backwards-compatible `generate_project({prompt})` tool. `createGenerationTool(context, options)` accepts `GenerationToolOptions<TSchema>`: required `name`, `label`, `description`, `parameters`, and `prompt(validatedArgs): string`, plus optional trusted `instructions`. The callback's arguments are inferred from the TypeBox schema. The prompt must be a nonempty public request of at most 16,384 UTF-8 bytes. Generation uses bounded original-user/public/previous-project context, the same service one-generation guard, and **the existing `runtime.generate` validation → compilation → artifact publication path**. It does not give custom tools a runtime/artifact-store capability. Generation tools must be created with the current turn's context and never cached across turns. Return the helper's tool with its original `execute` function so the whole-batch generation preflight recognizes it (copying tool metadata is safe; wrapping/replacing its executor is not supported). Their capability is revoked when the turn settles.
+
+### Bounds and failure rules
+
+| Configuration           | Default | Allowed                           |
+| ----------------------- | ------- | --------------------------------- |
+| `toolLimits.rounds`     | 2       | 1–8 conversation model requests   |
+| `toolLimits.batchCalls` | 1       | 1–4 tool calls per response       |
+| `toolLimits.totalCalls` | 1       | 1–8 tool calls per submitted turn |
+| `turnTimeoutMs`         | 180,000 | 1–300,000 milliseconds            |
+
+When supplying `toolLimits`, supply all three positive-integer fields. The final permitted conversation round cannot request tools; leave one round of headroom even for terminal generation. `{rounds:3,batchCalls:2,totalCalls:2}` permits a lookup round followed by generation. These limits do not increase generation attempts: **one generation per turn, initial project output plus at most one repair**. Generation must be the last call in its batch; duplicate generations or calls after generation are denied before any handler. Success is terminal even after an ordinary lookup in the same batch, with no paid summary or hidden retry. A custom tool may return `terminate:true` to end without a follow-up; if later calls remain in that batch, they fail closed without execution. Thrown errors, `isError:true`, oversized results and preflight failures end the turn with safe public errors, not a provider retry. Prior confirmed artifacts/text remain available.
+
+- At most 16 enabled tools. Names must be unique and match `[A-Za-z_][A-Za-z0-9_-]{0,63}`; labels/descriptions are limited to 128/2000 characters. Unknown/disabled names never execute.
+- Each schema is at most 16,000 UTF-8 JSON bytes and must have an object root with `additionalProperties:false`. Nested objects must also be closed. Supported schema keywords are `type`, `description`, `properties`, `required`, `additionalProperties:false`, `items`, `minItems`, `maxItems`, `minLength`, `maxLength`, `minimum`, `maximum`, `enum`, `const`, `anyOf`, `oneOf`, `allOf`. Types are object/array/string/number/integer/boolean/null; arrays require `items`. References, formats, patterns, defaults, executable transforms/coercion and `prepareArguments` are not supported and fail closed. Use pure host preflight for additional business constraints.
+- The runner validates the **entire original batch** before any handler: exact enabled names, provider IDs (including duplicates across rounds), raw-versus-parsed equality, strict schema checks and synchronous host `validateCall`. Throwing denies the batch; an accidentally async preflight also fails closed. A preflight may depend on prior-round host state, but not side effects from another call in the same batch: none have run yet. Do not perform I/O, mutate arguments, acquire resources or dispatch actions in a factory/preflight. Handlers run sequentially after the barrier.
+- Settings are at most 32,000 JSON bytes. Tool-specific generation instructions are at most 32,000 UTF-8 bytes. Model arguments are still at most 4096 UTF-8 bytes per call, tool result `content` at most 12,000 JSON bytes. Existing message, text, event/history, gateway response/token and request/deadline bounds are unchanged.
+
+**Callbacks are trusted host code, not sandboxed plugins.** They must honor cancellation (`context.signal` or the handler signal), bound any downstream I/O, and settle. Stop/deadline aborts the turn and waits for handlers to settle before releasing admission; JavaScript cannot forcibly kill a callback that ignores its signal or blocks the event loop. Tools, settings, dependency approvals and instructions must never be loaded from writable project manifests or accepted from browser commands/model arguments. Validate host settings before granting capabilities. Only explicitly selected tools are installed; filesystem/shell/default Pi tools are not added.
+
+Tool names/descriptions/schemas, returned `content`, prompt projections and any exposed context must be **public projections**. Never return credentials, private records, host routing/configuration or raw upstream errors. Although settings are not automatically exposed, a callback can deliberately leak them, and model tool content can be repeated in assistant text or generated code. The host remains responsible for authorization, rate/spend controls and safe downstream clients. No credential discovery, provider fallback or real login is performed by tool configuration.
+
 ## Model configuration and shared runner
 
 `createPiGateway` accepts an explicit Pi `Provider` and `modelId`. Supported wire APIs are `openai-completions` and `openai-responses`. No ambient keys, credential files, harness auth, default provider or transport retries are used. API-key auth requires a nonempty explicit key. For an explicit local model, use Pi's `createProvider` and `openAICompletionsApi()` with a literal loopback endpoint and `auth:{type:"local"}`; local mode forwards no authorization header. Remote endpoints require HTTPS; HTTP is restricted to literal `127.0.0.1`/`[::1]`. Endpoints are server configuration, never request fields. Redirects and SDK environment headers are not forwarded.

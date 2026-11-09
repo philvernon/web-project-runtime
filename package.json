@@ -40,7 +40,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json && node scripts/build-client.mjs",
     "prepare": "npm run build",
-    "check": "npm run lint && npm run typecheck:examples && npm run format:check",
+    "check": "npm run check:boundaries && npm run lint && npm run typecheck:examples && npm run format:check",
     "typecheck": "tsc --noEmit",
     "typecheck:examples": "tsc --noEmit -p examples/shared/tsconfig.json",
     "lint": "tsc --noEmit --noUnusedLocals --noUnusedParameters",
@@ -49,7 +49,8 @@
     "test": "vitest run",
     "test:distribution": "tsx tests/distribution.ts",
     "test:browser": "tsx tests/browser.ts && tsx tests/builder-browser.ts",
-    "test:examples": "tsx tests/examples-host.ts && tsx tests/examples-browser.ts"
+    "test:examples": "tsx tests/examples-host.ts && tsx tests/examples-browser.ts",
+    "check:boundaries": "tsx scripts/check-boundaries.ts"
   },
   "dependencies": {
     "@earendil-works/pi-agent-core": "1.3.0",

@@ -11,16 +11,35 @@ export async function exampleModelFixture(domain: "experiences" | "charts") {
   const stages: ("conversation" | "project")[] = [];
   const fixture = await syntheticEndpoint(async (body, response) => {
     const tools = body.tools as { function: { name: string } }[] | undefined;
-    if (tools?.some((tool) => tool.function.name === "generate_project")) {
+    if (
+      tools?.some(
+        (tool) =>
+          tool.function.name ===
+          (domain === "charts" ? "build_chart" : "build_experience"),
+      )
+    ) {
       stages.push("conversation");
-      turn++;
+      assert.deepEqual(
+        tools.map((tool) => tool.function.name).sort(),
+        domain === "charts"
+          ? ["build_chart", "get_delivery_data"]
+          : ["build_experience"],
+      );
+      const messages = body.messages as WireMessage[];
+      const afterLookup =
+        domain === "charts" && messages.at(-1)?.role === "tool";
+      if (afterLookup)
+        assert.match(
+          messageText(messages.at(-1)!),
+          /January.*scheduled.*completed/,
+        );
+      if (!afterLookup) turn++;
       assert.equal(body.max_completion_tokens, 2048);
       assert.equal(turn <= 2, true, "No hidden retry or paid summary");
       const text =
         turn === 1
           ? "Preparing the synthetic example."
           : "Updating the synthetic example.";
-      const messages = body.messages as WireMessage[];
       const latest = JSON.parse(
         messageText(
           messages.filter((message) => message.role === "user").at(-1)!,
@@ -29,12 +48,23 @@ export async function exampleModelFixture(domain: "experiences" | "charts") {
       response.writeHead(200, { "content-type": "text/event-stream" });
       response.end(
         completionFrames({
-          text,
+          text: afterLookup ? "" : text,
           calls: [
             {
-              id: `call_example_${turn}`,
-              name: "generate_project",
-              arguments: JSON.stringify({ prompt: latest.message }),
+              id: `call_example_${turn}_${afterLookup ? "build" : "lookup"}`,
+              name:
+                domain === "charts"
+                  ? afterLookup
+                    ? "build_chart"
+                    : "get_delivery_data"
+                  : "build_experience",
+              arguments: JSON.stringify(
+                domain === "charts"
+                  ? afterLookup
+                    ? { prompt: latest.message, useDeliveryData: true }
+                    : { dataset: "deliveries" }
+                  : { prompt: latest.message },
+              ),
             },
           ],
         }),
@@ -44,6 +74,8 @@ export async function exampleModelFixture(domain: "experiences" | "charts") {
       assert.equal(body.max_completion_tokens, 8192);
       const messages = body.messages as WireMessage[];
       const prompt = messageText(messages.at(-1)!);
+      if (domain === "charts")
+        assert.match(prompt, /Public synthetic data:.*January/);
       if (turn === 2) {
         assert.match(
           prompt,

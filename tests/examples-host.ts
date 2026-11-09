@@ -45,6 +45,10 @@ await test("example dev host: exact origin, private sessions, request and regist
       "createBuilderService",
       "CredentialStore",
       "generate_project",
+      "createGenerationTool",
+      "build_chart",
+      "get_delivery_data",
+      "Public synthetic delivery counts",
       model.gateway.model().baseUrl,
     ])
       assert(!bundle.includes(hidden), `Browser bundle leaked ${hidden}`);
