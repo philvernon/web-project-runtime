@@ -62,7 +62,8 @@ try {
     import {createWebProjectRuntime, projectResponseSchema, type ModelCall, type DependencyApproval, type WebProjectRuntime} from '@philvernon/web-project-runtime/server';
     import {artifactSchema, type ArtifactReference, type ArtifactPath, WebProjectError} from '@philvernon/web-project-runtime/contracts';
     import {ExperienceEmbed, WebBuilder, useWebBuilder, Conversation, ChatComposer, ChatMessage, AssistantMarkdown, type ExperienceEmbedProps, type WebBuilderProps, type WebBuilderState, type UseWebBuilderOptions, type ConversationProps, type ConversationExchange, type ChatComposerProps, type ChatMessageProps, type ComposerLabels} from '@philvernon/web-project-runtime/client';
-    import {createPiGateway, createBuilderService, runConversationTurn, type PiGateway, type BuilderSession, type ConversationLimits} from '@philvernon/web-project-runtime/pi';
+    import {createPiGateway, createBuilderService, createGenerationTool, runConversationTurn, type PiGateway, type BuilderSession, type ConversationLimits, type AgentTool, type AgentToolResult, type BuilderToolContext, type BuilderToolSet, type GenerationToolOptions, type BuilderServiceOptions} from '@philvernon/web-project-runtime/pi';
+    import {Type} from 'typebox';
     import {createWebBuilderController, createHttpBuilderTransport, type WebBuilderController} from '@philvernon/web-project-runtime/headless';
     import type {BuilderCommand, BuilderEvent, BuilderSnapshot} from '@philvernon/web-project-runtime/contracts';
     export const transport = createHttpBuilderTransport({endpoint:'/builder',origin:'https://consumer.test'});
@@ -72,6 +73,40 @@ try {
     const route: ArtifactPath = id => '/artifacts/'+id;
     const approvals: DependencyApproval[] = [];
     const runtime: WebProjectRuntime = createWebProjectRuntime({dependencies:approvals,mountId:'project',artifactPath:route});
+    const toolParameters = Type.Object({brief:Type.String()},{additionalProperties:false});
+    const generationConfig: GenerationToolOptions<typeof toolParameters> = {
+      name:'build_public',label:'Build',description:'Build public project',parameters:toolParameters,
+      prompt:args=>{
+        const brief: string = args.brief;
+        // @ts-expect-error Only validated schema fields are typed generation arguments.
+        void args.instructions;
+        return brief;
+      },
+    };
+    export function configuredTools(gateway: PiGateway) {
+      const config: BuilderServiceOptions<{palette:string}> = {
+        runtime,gateway,toolSettings:{palette:'blue'},toolLimits:{rounds:3,batchCalls:2,totalCalls:2},
+        tools:(context:BuilderToolContext<{palette:string}>):BuilderToolSet=>{
+          const palette:string=context.settings.palette;
+          // @ts-expect-error Host settings are readonly.
+          context.settings.palette='overwritten';
+          // @ts-expect-error No runtime/artifact authority is exposed in the turn context.
+          void context.runtime;
+          const custom:AgentTool<typeof toolParameters>={
+            name:'lookup',label:'Lookup',description:'Public lookup',parameters:toolParameters,
+            execute:async(_id,args,signal):Promise<AgentToolResult<undefined>>=>{
+              const brief:string=args.brief; signal?.throwIfAborted();
+              return {content:[{type:'text',text:brief+palette}],details:undefined};
+            },
+          };
+          return {tools:[custom,createGenerationTool(context,generationConfig)],validateCall:(_name,args)=>{void args;}};
+        },
+      };
+      return createBuilderService(config);
+    }
+    // @ts-expect-error Tool configuration is server-only, not a browser command.
+    const badCommand:BuilderCommand={type:'submit',requestId:'request_types',message:'Hi',toolSettings:{}};
+    void badCommand;
     const model: ModelCall = async request => { console.log(request.signal,projectResponseSchema); return {text:'{}'}; };
     const reference: ArtifactReference = artifactSchema.parse({});
     const props: ExperienceEmbedProps = {experience:reference,artifactPath:route};

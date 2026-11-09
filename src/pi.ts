@@ -20,3 +20,11 @@ export type {
   BuilderSession,
 } from "./pi/service.js";
 export { handleBuilderRequest } from "./pi/http.js";
+
+export { createGenerationTool } from "./pi/tools.js";
+export type {
+  BuilderToolContext,
+  BuilderToolSet,
+  GenerationToolOptions,
+} from "./pi/tools.js";
+export type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";

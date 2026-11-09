@@ -294,9 +294,17 @@ test("exact-origin host handler rejects unbounded/extra commands before model wo
     expect(
       (await handle(request(command, { "content-type": "text/plain" }))).status,
     ).toBe(415);
-    expect(
-      (await handle(request({ ...command, apiKey: "not-allowed" }))).status,
-    ).toBe(400);
+    for (const authority of [
+      "apiKey",
+      "tools",
+      "toolSettings",
+      "toolLimits",
+      "instructions",
+    ])
+      expect(
+        (await handle(request({ ...command, [authority]: "not-allowed" })))
+          .status,
+      ).toBe(400);
     expect(
       (await handle(request({ ...command, message: "x".repeat(30_000) })))
         .status,

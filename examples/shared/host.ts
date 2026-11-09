@@ -21,7 +21,7 @@ import {
   type BuilderSession,
   type PiGateway,
 } from "@philvernon/web-project-runtime/pi";
-import type { ExampleDefinition } from "./types.js";
+import type { ExampleDefinition } from "./definition.js";
 
 const SESSION_LIMIT = 8;
 const IDLE_MS = 15 * 60_000;
@@ -142,6 +142,8 @@ export async function createExampleHost(options: {
             gateway: options.gateway,
             instructions: options.example.instructions,
             publicContext: options.example.publicContext,
+            tools: options.example.tools,
+            toolLimits: options.example.toolLimits,
           }).createSession(),
           touched: Date.now(),
         };

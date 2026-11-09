@@ -63,6 +63,8 @@ const artifact = artifactResponse(runtime.getArtifact(id));
 // On host session removal: await session.dispose();
 ```
 
+The default tool is `generate_project`. Configure or replace the exact enabled set with server-side `tools(context)`, typed host `toolSettings` and bounded `toolLimits`; `createGenerationTool` keeps custom generation tools on the same guarded validation/build/artifact path. See [tool configuration](docs/builder-api.md#configuring-tools-server-only) for adding a public-data/custom tool without changing the UI or agent loop.
+
 There is no package-owned authentication, database or tenant registry. The stock transport uses same-origin host cookies, refuses redirects and sends bounded commands; the handler requires exact Origin/route matching. Explicit local model configuration and optional **OpenAI Responses OAuth** use the same gateway for conversation, project generation and repair. OAuth requires a host-owned Pi `CredentialStore`, `AuthInteraction` and stable installation UUID; no ambient credentials or automatic login/fallback are used. ChatGPT OAuth may omit `max_output_tokens`: the default rejects that before dispatch unless the host explicitly accepts the lack of a provider-side ceiling.
 
 ## APIs and limits
@@ -72,7 +74,7 @@ There is no package-owned authentication, database or tenant registry. The stock
 | `/client`     | `WebBuilder`, `useWebBuilder`, controlled `Conversation`/`ChatComposer`/`ChatMessage`/`AssistantMarkdown`, existing `ExperienceEmbed` |
 | `/styles.css` | Scoped package styles and `--wpr-*` host overrides                                                                                    |
 | `/headless`   | Framework-free `createWebBuilderController`, `createHttpBuilderTransport`                                                             |
-| `/pi`         | Server-only gateway, shared bounded `runConversationTurn`, service/session and request handler                                        |
+| `/pi`         | Server-only gateway, bounded runner, configurable service/toolsets, `createGenerationTool`, request handler                           |
 | `/server`     | Existing generation/compiler/artifact runtime, exact dependency resolver                                                              |
 | `/contracts`  | Browser-safe strict commands/events, schemas, references, errors and limits                                                           |
 
@@ -88,7 +90,7 @@ See [API configuration and contracts](docs/builder-api.md) for complete usage, i
 ```sh
 npm ci                              # prepare builds JavaScript, declarations and CSS
 npm --prefix examples/shared ci     # isolated example consumer
-npm run check                       # strict core/example types and formatting
+npm run check                       # source boundaries, strict core/example types and formatting
 npm test                            # engine, headless, auth, UI and example unit tests
 npm run test:distribution            # external pack/Git install, types, CSS, browser boundaries
 npx playwright install chromium     # once, if Chromium is not installed

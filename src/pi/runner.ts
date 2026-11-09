@@ -84,6 +84,7 @@ export async function runConversationTurn(options: ConversationTurnOptions) {
   let count = 0;
   let text = "";
   let streamedChars = 0;
+  let terminated = false;
   const tools = options.tools.map((tool): AgentTool => ({
     ...tool,
     executionMode: "sequential",
@@ -105,6 +106,7 @@ export async function runConversationTurn(options: ConversationTurnOptions) {
             "LIMIT",
             "Tool result exceeds its context bound.",
           );
+        terminated = result.terminate === true;
         return result;
       } catch (error) {
         latch(error);
@@ -139,6 +141,7 @@ export async function runConversationTurn(options: ConversationTurnOptions) {
     beforeToolCall: async ({ toolCall, args }) => {
       guard();
       if (
+        terminated ||
         !approved.has(toolCall.id) ||
         !isDeepStrictEqual(approved.get(toolCall.id), args)
       ) {
@@ -147,7 +150,10 @@ export async function runConversationTurn(options: ConversationTurnOptions) {
       }
       return undefined;
     },
-    finishTurn: async () => (failed ? { action: "end" } : undefined),
+    // Pi's default terminates only when EVERY batch result requests it. A
+    // terminal generation after a lookup must not cause a paid summary request.
+    finishTurn: async () =>
+      failed || terminated ? { action: "end" } : undefined,
   });
   agent.subscribe((event) => {
     if (failed) return;
@@ -233,7 +239,16 @@ export async function runConversationTurn(options: ConversationTurnOptions) {
           !isDeepStrictEqual(args, call.arguments)
         )
           throw invalid();
-        options.validateCall?.(raw.name, args);
+        const verdict: unknown = options.validateCall?.(raw.name, args);
+        if (
+          verdict &&
+          typeof (verdict as PromiseLike<unknown>).then === "function"
+        ) {
+          // A void callback can still be async in TypeScript. Never dispatch past
+          // an unawaited preflight, and absorb rejection without a hidden retry.
+          void Promise.resolve(verdict).catch(() => undefined);
+          throw invalid();
+        }
         batchProviderIds.add(providerId);
         approved.set(raw.id, structuredClone(args));
       }

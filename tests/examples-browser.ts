@@ -170,8 +170,10 @@ try {
           }
           assert.deepEqual(model.stages, [
             "conversation",
+            ...(example.id === "charts" ? ["conversation"] : []),
             "project",
             "conversation",
+            ...(example.id === "charts" ? ["conversation"] : []),
             "project",
           ]);
           for (const request of model.requests) {
